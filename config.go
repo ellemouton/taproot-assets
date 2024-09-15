@@ -227,9 +227,10 @@ type Config struct {
 
 	Prometheus monitoring.PrometheusConfig
 
-	// LogWriter is the root logger that all of the daemon's subloggers are
+	// LogMgr is the root logger that all of the daemon's subloggers are
 	// hooked up to.
-	LogWriter *build.RotatingLogWriter
+	LogMgr     *build.SubLoggerManager
+	LogRotator *build.RotatingLogWriter
 
 	*RPCConfig
 

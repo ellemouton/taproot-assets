@@ -341,9 +341,10 @@ type Config struct {
 
 	Experimental *ExperimentalConfig `group:"experimental" namespace:"experimental"`
 
-	// LogWriter is the root logger that all of the daemon's subloggers are
+	// LogMgr is the root logger that all of the daemon's subloggers are
 	// hooked up to.
-	LogWriter *build.RotatingLogWriter
+	LogMgr     *build.SubLoggerManager
+	LogRotator *build.RotatingLogWriter
 
 	// networkDir is the path to the directory of the currently active
 	// network. This path will hold the files related to each different
@@ -395,7 +396,7 @@ func DefaultConfig() Config {
 			Port:               5432,
 			MaxOpenConnections: 10,
 		},
-		LogWriter:               build.NewRotatingLogWriter(),
+		LogRotator:              build.NewRotatingLogWriter(),
 		Prometheus:              monitoring.DefaultPrometheusConfig(),
 		ReOrgSafeDepth:          defaultReOrgSafeDepth,
 		DefaultProofCourierAddr: defaultProofCourierAddr,
@@ -511,7 +512,7 @@ func LoadConfig(interceptor signal.Interceptor) (*Config, btclog.Logger, error) 
 		return nil, nil, err
 	}
 
-	cfgLogger := cfg.LogWriter.GenSubLogger("CONF", nil)
+	cfgLogger := cfg.LogMgr.GenSubLogger("CONF", nil)
 
 	// Make sure everything we just loaded makes sense.
 	cleanCfg, err := ValidateConfig(cfg, cfgLogger)
@@ -526,8 +527,8 @@ func LoadConfig(interceptor signal.Interceptor) (*Config, btclog.Logger, error) 
 	}
 
 	// Initialize logging at the default logging level.
-	tap.SetupLoggers(cfg.LogWriter, interceptor)
-	err = cfg.LogWriter.InitLogRotator(
+	tap.SetupLoggers(cfg.LogMgr, interceptor)
+	err = cfg.LogRotator.InitLogRotator(
 		filepath.Join(cleanCfg.LogDir, defaultLogFilename),
 		cleanCfg.MaxLogFileSize, cfg.MaxLogFiles,
 	)
@@ -537,7 +538,7 @@ func LoadConfig(interceptor signal.Interceptor) (*Config, btclog.Logger, error) 
 	}
 
 	// Parse, validate, and set debug log level(s).
-	err = build.ParseAndSetDebugLevels(cfg.DebugLevel, cfg.LogWriter)
+	err = build.ParseAndSetDebugLevels(cfg.DebugLevel, cfg.LogMgr)
 	if err != nil {
 		str := "error parsing debug level: %v"
 		cfgLogger.Warnf(str, err)
@@ -767,14 +768,19 @@ func ValidateConfig(cfg Config, cfgLogger btclog.Logger) (*Config, error) {
 
 	// A log writer must be passed in, otherwise we can't function and would
 	// run into a panic later on.
-	if cfg.LogWriter == nil {
-		return nil, mkErr("log writer missing in config")
+	if cfg.LogRotator == nil {
+		return nil, mkErr("log rotator missing in config")
 	}
+
+	cfg.LogMgr = build.NewSubLoggerManager(
+		build.NewConsoleHandler(os.Stdout),
+		build.NewLogFileHandler(cfg.LogRotator),
+	)
 
 	// Special show command to list supported subsystems and exit.
 	if cfg.DebugLevel == "show" {
 		fmt.Println("Supported subsystems",
-			cfg.LogWriter.SupportedSubsystems())
+			cfg.LogMgr.SupportedSubsystems())
 		os.Exit(0)
 	}
 

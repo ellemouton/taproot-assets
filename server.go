@@ -252,7 +252,7 @@ func (s *Server) RunUntilShutdown(mainErrChan <-chan error) error {
 
 	defer func() {
 		srvrLog.Info("Shutdown complete\n")
-		err := s.cfg.LogWriter.Close()
+		err := s.cfg.LogRotator.Close()
 		if err != nil {
 			srvrLog.Errorf("Could not close log rotator: %v", err)
 		}
